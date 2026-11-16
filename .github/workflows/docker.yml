@@ -107,7 +107,7 @@ jobs:
           SNIP_API=http://127.0.0.1:3000 node cli/cli.js ls | grep --fixed-strings https://example.com/release
 
       - name: Scan built image
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.33.1
         with:
           image-ref: snip:verify
           scan-type: image
