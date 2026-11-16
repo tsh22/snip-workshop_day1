@@ -66,3 +66,24 @@ git push
 ```
 
 Use the same workflow for `frontend` and `cli`.
+
+## Generated bundle
+
+The `bundle` submodule is generated from the source branches; do not edit it
+by hand. Node 20 or later and npm are required to rebuild it:
+
+```sh
+node scripts/build-bundle.mjs
+node scripts/build-bundle.mjs --push
+```
+
+The script updates the source submodules, builds the frontend, and commits
+changed bundle and superproject pointers. A second identical run is a no-op.
+`--push` publishes both branches. To run the generated app in one process:
+
+```sh
+cd bundle
+bun start
+```
+
+The generated Dockerfile can also build the bundle as a container.
