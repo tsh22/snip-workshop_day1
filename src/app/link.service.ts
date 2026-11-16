@@ -1,5 +1,5 @@
 import { HttpClient } from '@angular/common/http';
-import { Injectable, inject } from '@angular/core';
+import { Injectable, InjectionToken, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
 export interface ShortLink {
@@ -14,10 +14,21 @@ export interface CreateLinkRequest {
   url: string;
 }
 
+export function getLinksApiBaseUrl(location: Pick<Location, 'hostname' | 'port'>): string {
+  return location.hostname === 'localhost' && location.port === '4200'
+    ? 'http://localhost:3000'
+    : '';
+}
+
+export const LINKS_API_BASE_URL = new InjectionToken<string>('Links API base URL', {
+  providedIn: 'root',
+  factory: () => getLinksApiBaseUrl(window.location),
+});
+
 @Injectable({ providedIn: 'root' })
 export class LinkService {
   private readonly http = inject(HttpClient);
-  private readonly endpoint = 'http://localhost:3000/api/links';
+  private readonly endpoint = `${inject(LINKS_API_BASE_URL)}/api/links`;
 
   getLinks(): Observable<ShortLink[]> {
     return this.http.get<ShortLink[]>(this.endpoint);

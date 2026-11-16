@@ -2,7 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { AppComponent } from './app.component';
-import { ShortLink } from './link.service';
+import { LINKS_API_BASE_URL, ShortLink } from './link.service';
 
 describe('AppComponent', () => {
   let httpTesting: HttpTestingController;
@@ -10,7 +10,11 @@ describe('AppComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [AppComponent],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: LINKS_API_BASE_URL, useValue: 'http://localhost:3000' },
+      ],
     }).compileComponents();
     httpTesting = TestBed.inject(HttpTestingController);
   });
