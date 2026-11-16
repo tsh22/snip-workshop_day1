@@ -1,0 +1,63 @@
+name: Build bundle
+
+on:
+  # Deliberately schedule-only: push workflows run from the pushed branch, and
+  # this workflow exists only on main, so pushes to component branches cannot
+  # trigger it.
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: build-bundle
+  cancel-in-progress: false
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main and its submodules
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          submodules: true
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Configure Git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Configure GitHub authentication for submodule pushes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          AUTH_HEADER="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic $AUTH_HEADER"
+
+      - name: Rebuild and push bundle
+        id: rebuild
+        run: |
+          before="$(git rev-parse HEAD:bundle)"
+          node scripts/build-bundle.mjs --push
+          after="$(git rev-parse HEAD:bundle)"
+          if [ "$before" != "$after" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Pushes made with GITHUB_TOKEN do not trigger the image push workflow.
+      - name: Dispatch image workflow for the new bundle
+        if: steps.rebuild.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run docker.yml --ref main

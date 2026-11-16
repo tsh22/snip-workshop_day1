@@ -87,3 +87,16 @@ bun start
 ```
 
 The generated Dockerfile can also build the bundle as a container.
+
+## Release automation
+
+The bundle workflow runs hourly or by manual dispatch, updates component
+branches, and rebuilds the generated output. When its bundle pointer changes,
+it explicitly dispatches the image workflow: pushes made with GitHub's
+automatic token do not start a push-triggered workflow.
+
+The image workflow also runs on a `main` push that changes the bundle gitlink
+or the image workflow itself. It builds and tests the pinned components,
+audits dependencies, smoke-tests and scans the image, and only then publishes
+the verified image to GitHub Container Registry with `latest` and short-SHA
+tags.

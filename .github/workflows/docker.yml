@@ -1,0 +1,144 @@
+name: Build and push image
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      # This is the bundle submodule pointer, not files within bundle/.
+      - bundle
+      - .github/workflows/docker.yml
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  verify-and-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out main and all pinned submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1'
+
+      - name: Install and build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npx ng build
+
+      - name: Audit frontend dependencies
+        working-directory: frontend
+        run: npm audit --audit-level=high
+
+      - name: Test frontend
+        working-directory: frontend
+        run: npm test -- --watch=false --browsers=ChromeHeadless
+
+      - name: Test API and CLI integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd backend && exec bun run server.js) >/tmp/snip-backend.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3000/api/links >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:3000/api/links >/dev/null
+
+          short_url="$(SNIP_API=http://127.0.0.1:3000 node cli/cli.js add https://example.com/docs)"
+          code="${short_url##*/}"
+          SNIP_API=http://127.0.0.1:3000 node cli/cli.js ls | grep --fixed-strings https://example.com/docs
+
+          curl --silent --show-error --dump-header /tmp/snip-headers --output /dev/null \
+            "http://127.0.0.1:3000/$code"
+          grep --extended-regexp --ignore-case '^HTTP/[^ ]+ 302' /tmp/snip-headers
+          grep --fixed-strings --ignore-case 'Location: https://example.com/docs' /tmp/snip-headers
+
+          links="$(curl --fail --silent http://127.0.0.1:3000/api/links)"
+          node -e 'const links = JSON.parse(process.argv[1]); if (links.length !== 1 || links[0].hits !== 1) process.exit(1);' "$links"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image for verification
+        id: verify-build
+        uses: docker/build-push-action@v6
+        with:
+          context: ./bundle
+          file: ./bundle/Dockerfile
+          tags: snip:verify
+          load: true
+          push: false
+
+      - name: Test generated image serves the UI and API
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --detach --rm --name snip-release-smoke --publish 3000:3000 snip:verify
+          trap 'docker rm --force snip-release-smoke >/dev/null 2>&1 || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3000/ >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:3000/ | grep --fixed-strings '<html'
+          curl --fail --silent http://127.0.0.1:3000/api/links | grep --fixed-strings '[]'
+          SNIP_API=http://127.0.0.1:3000 node cli/cli.js add https://example.com/release
+          SNIP_API=http://127.0.0.1:3000 node cli/cli.js ls | grep --fixed-strings https://example.com/release
+
+      - name: Scan built image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: snip:verify
+          scan-type: image
+          format: table
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=latest
+            type=sha,format=short
+
+      - name: Tag and publish the verified image
+        env:
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r tag; do
+            [ -n "$tag" ] || continue
+            docker tag snip:verify "$tag"
+            docker push "$tag"
+          done <<< "$IMAGE_TAGS"
