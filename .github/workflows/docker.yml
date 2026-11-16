@@ -107,13 +107,11 @@ jobs:
           SNIP_API=http://127.0.0.1:3000 node cli/cli.js ls | grep --fixed-strings https://example.com/release
 
       - name: Scan built image
-        uses: aquasecurity/trivy-action@v0.33.1
-        with:
-          image-ref: snip:verify
-          scan-type: image
-          format: table
-          severity: HIGH,CRITICAL
-          exit-code: '1'
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:0.65.0 image \
+            --severity HIGH,CRITICAL --exit-code 1 snip:verify
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
