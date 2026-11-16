@@ -1,0 +1,123 @@
+<main class="page-shell">
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Snip home">
+      <span class="brand-mark" aria-hidden="true">s</span>
+      <span>snip</span>
+    </a>
+    <span class="topbar-label">A simple link shortener</span>
+  </header>
+
+  <section class="hero" aria-labelledby="page-title">
+    <p class="eyebrow">LESS LINK. MORE GO.</p>
+    <h1 id="page-title">Make every link <span>count.</span></h1>
+    <p class="hero-copy">Turn long URLs into short, shareable links in a snap.</p>
+
+    <form class="shorten-form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+      <label class="sr-only" for="url-input">URL to shorten</label>
+      <div class="input-wrap" [class.input-invalid]="urlControl.invalid && urlControl.touched">
+        <svg class="link-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M10 13a5 5 0 0 0 7.07 0l3-3A5 5 0 0 0 13 2.93l-1.72 1.71m2.72 6.36a5 5 0 0 0-7.07 0l-3 3A5 5 0 0 0 11 21.07l1.71-1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <input
+          id="url-input"
+          type="url"
+          inputmode="url"
+          autocomplete="url"
+          placeholder="Paste your long URL here..."
+          formControlName="url"
+          [attr.aria-invalid]="urlControl.invalid && urlControl.touched"
+          aria-describedby="url-help url-error"
+          (input)="clearMessages()"
+        />
+        <button class="shorten-button" type="submit" [disabled]="pending()">
+          @if (pending()) {
+            <span class="spinner" aria-hidden="true"></span>
+            Shortening
+          } @else {
+            Shorten link
+            <span aria-hidden="true">→</span>
+          }
+        </button>
+      </div>
+      <p class="field-help" id="url-help">Use a complete URL starting with http:// or https://</p>
+      <div class="field-error" id="url-error" aria-live="assertive">
+        @if (urlControl.touched && urlControl.errors; as errors) {
+          @if (errors['required']) {
+            <span>Please enter a URL to shorten.</span>
+          } @else if (errors['httpUrl']) {
+            <span>Enter a valid http or https URL.</span>
+          } @else if (errors['server']) {
+            <span>{{ errors['server'] }}</span>
+          }
+        }
+      </div>
+    </form>
+
+    @if (createdLink(); as link) {
+      <div class="notice notice-success" role="status" aria-live="polite">
+        <span class="notice-icon" aria-hidden="true">✓</span>
+        <span>Your short link is ready:</span>
+        <a [href]="link.shortUrl">{{ link.shortUrl }}</a>
+      </div>
+    }
+
+    @if (requestError(); as error) {
+      <div class="notice notice-error" role="alert">{{ error }}</div>
+    }
+  </section>
+
+  <section class="links-section" aria-labelledby="links-title">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">YOUR COLLECTION</p>
+        <h2 id="links-title">Recent links</h2>
+      </div>
+      <span class="link-count">{{ links().length }} {{ links().length === 1 ? 'link' : 'links' }}</span>
+    </div>
+
+    @if (loading()) {
+      <div class="state-card" role="status" aria-live="polite">
+        <span class="spinner spinner-dark" aria-hidden="true"></span>
+        Loading your links…
+      </div>
+    } @else if (listError()) {
+      <div class="state-card state-error" role="alert">
+        <p>{{ listError() }}</p>
+        <button class="retry-button" type="button" (click)="loadLinks()">Try again</button>
+      </div>
+    } @else if (!links().length) {
+      <div class="state-card empty-state">
+        <span class="empty-icon" aria-hidden="true">↗</span>
+        <h3>No links yet</h3>
+        <p>Your shortened links will show up here.</p>
+      </div>
+    } @else {
+      <div class="table-card">
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Short link</th>
+                <th scope="col">Original URL</th>
+                <th scope="col" class="hits-heading">Hits</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (link of links(); track link.code) {
+                <tr>
+                  <td>
+                    <a class="short-link" [href]="link.shortUrl">{{ link.code }}</a>
+                  </td>
+                  <td class="original-url" [title]="link.url">{{ link.url }}</td>
+                  <td class="hits-cell">{{ link.hits }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    }
+  </section>
+
+  <footer class="footer">Small links, big possibilities.</footer>
+</main>
